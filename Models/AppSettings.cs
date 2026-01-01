@@ -34,6 +34,11 @@ namespace PhoneRomFlashTool.Models
         public bool AutoCheckUpdates { get; set; } = true;
         public int UpdateCheckIntervalHours { get; set; } = 24;
 
+        // First run / Setup completion
+        public bool IsFirstRun { get; set; } = true;
+        public bool SetupCompleted { get; set; } = false;
+        public bool PlatformToolsInstalled { get; set; } = false;
+
         // Download sources
         public string ToolsManifestUrl { get; set; } = "https://raw.githubusercontent.com/nicholast/android-tools/main/manifest.json";
         public string DriversManifestUrl { get; set; } = "https://raw.githubusercontent.com/nicholast/phone-drivers/main/manifest.json";

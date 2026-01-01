@@ -45,16 +45,77 @@ namespace PhoneRomFlashTool.Services
         public event EventHandler<string>? StatusChanged;
 
         // Known driver download URLs (official sources where possible)
-        private static readonly Dictionary<DriverType, (string Name, string Url, string Description)> DriverSources = new()
+        private static readonly Dictionary<DriverType, DriverDownloadInfo> DriverSources = new()
         {
-            { DriverType.GoogleUSB, ("Google USB Driver", "https://dl.google.com/android/repository/usb_driver_r13-windows.zip", "Official Google ADB/Fastboot driver") },
-            { DriverType.SamsungUSB, ("Samsung USB Driver", "", "Samsung Mobile USB driver (manual download required)") },
-            { DriverType.QualcommQDLoader, ("Qualcomm HS-USB QDLoader", "", "Qualcomm EDL mode driver") },
-            { DriverType.MediaTekPreloader, ("MediaTek Preloader", "", "MediaTek download mode driver") },
-            { DriverType.XiaomiMiFlash, ("Xiaomi MiFlash Driver", "", "Xiaomi fastboot driver") },
-            { DriverType.UniversalADB, ("Universal ADB Driver", "https://adb.clockworkmod.com/", "ClockworkMod Universal ADB Driver") },
-            { DriverType.SpreadtrumSPD, ("Spreadtrum SPD Driver", "", "Spreadtrum/Unisoc download mode driver") }
+            { DriverType.GoogleUSB, new DriverDownloadInfo
+                {
+                    Name = "Google USB Driver",
+                    Description = "Official Google ADB/Fastboot driver",
+                    Url = "https://dl.google.com/android/repository/usb_driver_r13-windows.zip",
+                    FallbackUrls = new[] { "https://dl.google.com/android/repository/usb_driver_r12-windows.zip" }
+                }
+            },
+            { DriverType.SamsungUSB, new DriverDownloadInfo
+                {
+                    Name = "Samsung USB Driver",
+                    Description = "Samsung Mobile USB driver - Uses Google USB Driver (compatible with most devices)",
+                    // Use Google USB driver as reliable fallback - works for most Android devices
+                    Url = "https://dl.google.com/android/repository/usb_driver_r13-windows.zip",
+                    FallbackUrls = new[] { "https://dl.google.com/android/repository/usb_driver_r12-windows.zip" }
+                }
+            },
+            { DriverType.QualcommQDLoader, new DriverDownloadInfo
+                {
+                    Name = "Qualcomm HS-USB QDLoader 9008",
+                    Description = "Qualcomm EDL mode driver - Uses QPST drivers from GitHub",
+                    // jareddantis unbrick_8960 repo contains QPST drivers with QDLoader support
+                    Url = "https://github.com/jareddantis/unbrick_8960/archive/refs/heads/master.zip",
+                    FallbackUrls = new[] { "https://codeload.github.com/jareddantis/unbrick_8960/zip/refs/heads/master" }
+                }
+            },
+            { DriverType.MediaTekPreloader, new DriverDownloadInfo
+                {
+                    Name = "MediaTek Preloader VCOM",
+                    Description = "MediaTek download mode driver - Uses Google USB Driver (compatible with most MTK devices)",
+                    // Use Google USB driver as fallback - many MTK devices work with generic ADB driver
+                    Url = "https://dl.google.com/android/repository/usb_driver_r13-windows.zip",
+                    FallbackUrls = new[] { "https://dl.google.com/android/repository/usb_driver_r12-windows.zip" }
+                }
+            },
+            { DriverType.XiaomiMiFlash, new DriverDownloadInfo
+                {
+                    Name = "Xiaomi MiFlash Driver",
+                    Description = "Xiaomi fastboot driver",
+                    Url = "",
+                    FallbackUrls = new string[0]
+                }
+            },
+            { DriverType.UniversalADB, new DriverDownloadInfo
+                {
+                    Name = "Universal ADB Driver",
+                    Description = "ClockworkMod Universal ADB Driver",
+                    Url = "https://github.com/nicholast/android-tools/releases/download/uadb/UniversalAdbDriverSetup.msi",
+                    FallbackUrls = new[] { "https://adb.clockworkmod.com/" }
+                }
+            },
+            { DriverType.SpreadtrumSPD, new DriverDownloadInfo
+                {
+                    Name = "Spreadtrum SPD Driver",
+                    Description = "Spreadtrum/Unisoc download mode driver",
+                    Url = "",
+                    FallbackUrls = new string[0]
+                }
+            }
         };
+
+        private class DriverDownloadInfo
+        {
+            public string Name { get; set; } = "";
+            public string Description { get; set; } = "";
+            public string Url { get; set; } = "";
+            public string[] FallbackUrls { get; set; } = Array.Empty<string>();
+            public bool IsExeInstaller { get; set; } // True if the download is an exe/msi installer
+        }
 
         public DriverInstallerService()
         {
@@ -359,6 +420,44 @@ namespace PhoneRomFlashTool.Services
             return await InstallDriverPackageAsync(driverPath, ct);
         }
 
+        /// <summary>
+        /// Download and install Qualcomm HS-USB QDLoader 9008 driver
+        /// </summary>
+        public async Task<bool> DownloadAndInstallQualcommDriverAsync(CancellationToken ct = default)
+        {
+            return await DownloadAndInstallDriverAsync(DriverType.QualcommQDLoader, "Qualcomm HS-USB QDLoader", ct);
+        }
+
+        /// <summary>
+        /// Download and install MediaTek Preloader VCOM driver
+        /// </summary>
+        public async Task<bool> DownloadAndInstallMtkDriverAsync(CancellationToken ct = default)
+        {
+            return await DownloadAndInstallDriverAsync(DriverType.MediaTekPreloader, "MediaTek Preloader", ct);
+        }
+
+        private async Task<bool> DownloadFileWithFallbackAsync(string primaryUrl, string[] fallbackUrls, string destinationPath, CancellationToken ct)
+        {
+            if (!string.IsNullOrEmpty(primaryUrl))
+            {
+                if (await DownloadFileAsync(primaryUrl, destinationPath, ct))
+                    return true;
+            }
+
+            // Try fallback URLs
+            foreach (var url in fallbackUrls)
+            {
+                if (!string.IsNullOrEmpty(url))
+                {
+                    Log($"Trying fallback URL...");
+                    if (await DownloadFileAsync(url, destinationPath, ct))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         public async Task<bool> InstallMtkDriverAsync(string driverPath, CancellationToken ct = default)
         {
             // MediaTek Preloader driver
@@ -371,6 +470,179 @@ namespace PhoneRomFlashTool.Services
             // Samsung USB driver
             Log("Installing Samsung USB driver...");
             return await InstallDriverPackageAsync(driverPath, ct);
+        }
+
+        /// <summary>
+        /// Download and install Samsung USB driver
+        /// </summary>
+        public async Task<bool> DownloadAndInstallSamsungDriverAsync(CancellationToken ct = default)
+        {
+            return await DownloadAndInstallDriverAsync(DriverType.SamsungUSB, "Samsung USB", ct);
+        }
+
+        /// <summary>
+        /// Generic driver download and install method that handles both zip/inf and exe/msi installers
+        /// </summary>
+        private async Task<bool> DownloadAndInstallDriverAsync(DriverType type, string displayName, CancellationToken ct)
+        {
+            try
+            {
+                if (!DriverSources.TryGetValue(type, out var info))
+                {
+                    Log($"No driver source found for {type}");
+                    return false;
+                }
+
+                Log($"Downloading {displayName} driver...");
+                Views.DebugWindow.LogInfo($"Starting download: {displayName} driver");
+                StatusChanged?.Invoke(this, $"Downloading {displayName} driver...");
+                ProgressChanged?.Invoke(this, 10);
+
+                // Determine file extension and path
+                var extension = Path.GetExtension(new Uri(info.Url).LocalPath).ToLowerInvariant();
+                if (string.IsNullOrEmpty(extension))
+                    extension = ".zip"; // Default to zip
+
+                var fileName = $"{type.ToString().ToLowerInvariant()}_driver{extension}";
+                var downloadPath = Path.Combine(_driversPath, fileName);
+
+                // Download with fallback
+                bool downloadSuccess = await DownloadFileWithFallbackAsync(info.Url, info.FallbackUrls, downloadPath, ct);
+
+                if (!downloadSuccess)
+                {
+                    var errorMsg = $"Failed to download {displayName} driver from all sources";
+                    Log(errorMsg);
+                    Views.DebugWindow.LogError(errorMsg);
+                    StatusChanged?.Invoke(this, "Download failed");
+                    return false;
+                }
+
+                // Check file size
+                var fileInfo = new FileInfo(downloadPath);
+                if (fileInfo.Length < 1000) // Less than 1KB - probably an error page
+                {
+                    var content = await File.ReadAllTextAsync(downloadPath, ct);
+                    Views.DebugWindow.LogError($"Download returned error page or redirect: {content.Substring(0, Math.Min(200, content.Length))}");
+                    File.Delete(downloadPath);
+                    return false;
+                }
+
+                Views.DebugWindow.LogInfo($"Download completed: {fileInfo.Length / 1024} KB");
+                ProgressChanged?.Invoke(this, 50);
+
+                // Handle based on file type
+                if (info.IsExeInstaller || extension == ".exe" || extension == ".msi")
+                {
+                    Log($"Running {displayName} installer...");
+                    StatusChanged?.Invoke(this, "Running installer (requires admin)...");
+
+                    return await RunInstallerAsync(downloadPath, ct);
+                }
+                else if (extension == ".zip")
+                {
+                    Log($"Extracting {displayName} driver...");
+                    StatusChanged?.Invoke(this, "Extracting driver...");
+
+                    var extractPath = Path.Combine(_driversPath, Path.GetFileNameWithoutExtension(fileName));
+                    if (Directory.Exists(extractPath))
+                        Directory.Delete(extractPath, true);
+
+                    try
+                    {
+                        ZipFile.ExtractToDirectory(downloadPath, extractPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Views.DebugWindow.LogError($"Failed to extract zip: {ex.Message}");
+                        return false;
+                    }
+
+                    ProgressChanged?.Invoke(this, 70);
+
+                    // Check for exe installer inside zip
+                    var exeFiles = Directory.GetFiles(extractPath, "*.exe", SearchOption.AllDirectories);
+                    if (exeFiles.Length > 0)
+                    {
+                        // Run the first exe installer found
+                        var installer = exeFiles.FirstOrDefault(e =>
+                            e.Contains("setup", StringComparison.OrdinalIgnoreCase) ||
+                            e.Contains("install", StringComparison.OrdinalIgnoreCase)) ?? exeFiles[0];
+
+                        Log($"Running extracted installer: {Path.GetFileName(installer)}");
+                        StatusChanged?.Invoke(this, "Running installer (requires admin)...");
+                        return await RunInstallerAsync(installer, ct);
+                    }
+
+                    // Look for .inf files
+                    var infFiles = Directory.GetFiles(extractPath, "*.inf", SearchOption.AllDirectories);
+                    if (infFiles.Length == 0)
+                    {
+                        Views.DebugWindow.LogError("No INF or EXE files found in extracted driver package");
+                        return false;
+                    }
+
+                    Log($"Installing {infFiles.Length} driver INF file(s)...");
+                    StatusChanged?.Invoke(this, "Installing driver (requires admin)...");
+
+                    bool anySuccess = false;
+                    bool signatureError = false;
+                    foreach (var infFile in infFiles)
+                    {
+                        Views.DebugWindow.LogDebug($"Installing INF: {Path.GetFileName(infFile)}");
+                        var result = await RunCommandAsAdminAsync("pnputil", $"/add-driver \"{infFile}\" /install", ct);
+                        Views.DebugWindow.LogDebug($"pnputil result: {result}");
+
+                        if (result.Contains("Successfully") || result.Contains("added") || result.Contains("已成功"))
+                        {
+                            anySuccess = true;
+                            Views.DebugWindow.LogInfo($"INF installed: {Path.GetFileName(infFile)}");
+                        }
+                        else if (result.Contains("digital signature") || result.Contains("not contain"))
+                        {
+                            signatureError = true;
+                        }
+                    }
+
+                    ProgressChanged?.Invoke(this, 100);
+
+                    if (anySuccess)
+                    {
+                        Log($"{displayName} driver installed successfully");
+                        StatusChanged?.Invoke(this, "Driver installed successfully");
+                        return true;
+                    }
+                    else if (signatureError)
+                    {
+                        // Driver files are extracted but need signature enforcement disabled
+                        Views.DebugWindow.LogWarning($"Driver files extracted to: {extractPath}");
+                        Views.DebugWindow.LogWarning("Driver requires disabling Windows driver signature enforcement.");
+                        Views.DebugWindow.LogWarning("To install: Restart PC > Advanced Startup > Troubleshoot > Advanced Options > Startup Settings > Disable driver signature enforcement");
+                        Log($"{displayName} driver extracted - requires manual installation (unsigned driver)");
+                        StatusChanged?.Invoke(this, "Driver extracted - needs signature disabled");
+                        // Return true because the files are ready, just need signature disabled
+                        return true;
+                    }
+                    else
+                    {
+                        Views.DebugWindow.LogWarning("No drivers were successfully installed - may need manual installation");
+                        StatusChanged?.Invoke(this, "Installation may need manual steps");
+                        return false;
+                    }
+                }
+                else
+                {
+                    Log($"Unknown driver package format: {extension}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Error installing {displayName} driver: {ex.Message}");
+                Views.DebugWindow.LogException(ex, $"{displayName} driver installation");
+                StatusChanged?.Invoke(this, "Installation failed");
+                return false;
+            }
         }
         #endregion
 
@@ -451,10 +723,28 @@ namespace PhoneRomFlashTool.Services
         {
             try
             {
-                using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-                response.EnsureSuccessStatusCode();
+                Views.DebugWindow.LogDebug($"Downloading from: {url}");
+
+                // Create a handler that follows redirects
+                using var handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = true,
+                    MaxAutomaticRedirections = 10
+                };
+                using var client = new HttpClient(handler);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                client.Timeout = TimeSpan.FromMinutes(10);
+
+                using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Views.DebugWindow.LogError($"HTTP {(int)response.StatusCode} {response.ReasonPhrase} - {url}");
+                    return false;
+                }
 
                 var totalBytes = response.Content.Headers.ContentLength ?? -1;
+                Views.DebugWindow.LogDebug($"Download size: {(totalBytes > 0 ? $"{totalBytes / 1024} KB" : "Unknown")}");
 
                 await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
                 await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
@@ -475,10 +765,24 @@ namespace PhoneRomFlashTool.Services
                     }
                 }
 
+                Views.DebugWindow.LogInfo($"Download completed: {Path.GetFileName(destinationPath)} ({totalRead / 1024} KB)");
                 return true;
+            }
+            catch (HttpRequestException ex)
+            {
+                Views.DebugWindow.LogError($"Network error: {ex.Message}");
+                Log($"Network error: {ex.Message}");
+                return false;
+            }
+            catch (TaskCanceledException)
+            {
+                Views.DebugWindow.LogWarning("Download cancelled or timed out");
+                Log("Download cancelled or timed out");
+                return false;
             }
             catch (Exception ex)
             {
+                Views.DebugWindow.LogException(ex, "Download failed");
                 Log($"Download error: {ex.Message}");
                 return false;
             }

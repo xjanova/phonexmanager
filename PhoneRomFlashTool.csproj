@@ -13,6 +13,7 @@
     <Product>PhoneX Manager</Product>
     <Copyright>Copyright (c) 2024-2025 Xman Studio. All rights reserved.</Copyright>
     <Description>PhoneX Manager - Universal Phone ROM Flash, Backup, Recovery and Engineering Tool by Xman Studio</Description>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,6 +31,12 @@
     <None Update="Tools\fastboot.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\icon.png" />
+    <Resource Include="Assets\logo11.png" />
+    <Resource Include="Assets\logover.jpeg" />
   </ItemGroup>
 
 </Project>

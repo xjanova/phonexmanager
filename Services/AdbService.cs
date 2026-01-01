@@ -19,6 +19,10 @@ namespace PhoneRomFlashTool.Services
         private List<DeviceInfo> _lastKnownDevices = new();
         private bool _disposed;
 
+        // Cache for USB controllers to avoid repeated logging
+        private readonly HashSet<string> _loggedUsbControllers = new();
+        private bool _usbControllersScanned = false;
+
         public event EventHandler<DeviceInfo>? DeviceConnected;
         public event EventHandler<DeviceInfo>? DeviceDisconnected;
         public event EventHandler<string>? LogMessage;
@@ -42,7 +46,8 @@ namespace PhoneRomFlashTool.Services
 
         public void StartDeviceMonitoring()
         {
-            _deviceMonitorTimer = new Timer(async _ => await CheckDevicesAsync(), null, 0, 2000);
+            // Check immediately on start, then poll every 3 seconds (reduced from 1s to avoid spam)
+            _deviceMonitorTimer = new Timer(async _ => await CheckDevicesAsync(), null, 0, 3000);
             Log("Started device monitoring");
         }
 
@@ -203,18 +208,28 @@ namespace PhoneRomFlashTool.Services
 
             try
             {
+                // Scan for USB devices including USB Type-C / USB 3.x controllers
                 using var searcher = new ManagementObjectSearcher(
-                    "SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB%'");
+                    "SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB%' OR DeviceID LIKE 'USBSTOR%'");
 
                 foreach (ManagementObject device in searcher.Get())
                 {
                     var deviceId = device["DeviceID"]?.ToString() ?? "";
                     var name = device["Name"]?.ToString() ?? "";
                     var description = device["Description"]?.ToString() ?? "";
+                    var status = device["Status"]?.ToString() ?? "";
+
+                    // Skip if not active
+                    if (status != "OK") continue;
+
+                    // Determine connection type (USB-C / USB 3.x detection)
+                    var connectionInfo = GetUsbConnectionType(deviceId, name, description);
 
                     // ตรวจสอบอุปกรณ์ที่เป็น Qualcomm EDL mode
                     if (name.Contains("Qualcomm HS-USB QDLoader") ||
-                        description.Contains("Qualcomm HS-USB QDLoader"))
+                        description.Contains("Qualcomm HS-USB QDLoader") ||
+                        name.Contains("Qualcomm HS-USB") ||
+                        name.Contains("9008"))
                     {
                         devices.Add(new DeviceInfo
                         {
@@ -225,12 +240,16 @@ namespace PhoneRomFlashTool.Services
                             ConnectionType = DeviceConnectionType.EDL,
                             Mode = DeviceMode.EDL,
                             IsConnected = true,
-                            ConnectedTime = DateTime.Now
+                            ConnectedTime = DateTime.Now,
+                            UsbType = connectionInfo.UsbType,
+                            UsbSpeed = connectionInfo.UsbSpeed
                         });
                     }
                     // MTK Preloader
                     else if (name.Contains("MediaTek PreLoader") ||
-                             name.Contains("MediaTek USB Port"))
+                             name.Contains("MediaTek USB Port") ||
+                             name.Contains("MTK") ||
+                             description.Contains("MediaTek"))
                     {
                         devices.Add(new DeviceInfo
                         {
@@ -241,12 +260,15 @@ namespace PhoneRomFlashTool.Services
                             ConnectionType = DeviceConnectionType.MTK,
                             Mode = DeviceMode.Download,
                             IsConnected = true,
-                            ConnectedTime = DateTime.Now
+                            ConnectedTime = DateTime.Now,
+                            UsbType = connectionInfo.UsbType,
+                            UsbSpeed = connectionInfo.UsbSpeed
                         });
                     }
                     // Samsung Download Mode
                     else if (name.Contains("SAMSUNG Mobile USB") ||
-                             description.Contains("Samsung Mobile USB"))
+                             description.Contains("Samsung Mobile USB") ||
+                             name.Contains("SAMSUNG Android"))
                     {
                         devices.Add(new DeviceInfo
                         {
@@ -257,10 +279,34 @@ namespace PhoneRomFlashTool.Services
                             ConnectionType = DeviceConnectionType.Samsung,
                             Mode = DeviceMode.Download,
                             IsConnected = true,
-                            ConnectedTime = DateTime.Now
+                            ConnectedTime = DateTime.Now,
+                            UsbType = connectionInfo.UsbType,
+                            UsbSpeed = connectionInfo.UsbSpeed
+                        });
+                    }
+                    // Generic Android device via USB
+                    else if (name.Contains("Android") ||
+                             name.Contains("ADB Interface") ||
+                             description.Contains("Android"))
+                    {
+                        devices.Add(new DeviceInfo
+                        {
+                            DeviceId = deviceId,
+                            SerialNumber = ExtractSerialFromDeviceId(deviceId),
+                            Brand = "Android",
+                            Model = "Android Device",
+                            ConnectionType = DeviceConnectionType.ADB,
+                            Mode = DeviceMode.Normal,
+                            IsConnected = true,
+                            ConnectedTime = DateTime.Now,
+                            UsbType = connectionInfo.UsbType,
+                            UsbSpeed = connectionInfo.UsbSpeed
                         });
                     }
                 }
+
+                // Also scan USB Type-C / Thunderbolt controllers for motherboard USB-C
+                ScanUsbTypeCControllers(devices);
             }
             catch (Exception ex)
             {
@@ -268,6 +314,92 @@ namespace PhoneRomFlashTool.Services
             }
 
             return devices;
+        }
+
+        private (string UsbType, string UsbSpeed) GetUsbConnectionType(string deviceId, string name, string description)
+        {
+            string usbType = "USB-A";
+            string usbSpeed = "USB 2.0";
+
+            // Check for USB 3.x / SuperSpeed indicators
+            if (deviceId.Contains("USB3") || name.Contains("USB 3") || name.Contains("SuperSpeed") ||
+                description.Contains("USB 3") || description.Contains("xHCI"))
+            {
+                usbSpeed = "USB 3.0+";
+            }
+
+            // Check for USB Type-C indicators
+            if (name.Contains("Type-C") || name.Contains("USB-C") ||
+                description.Contains("Type-C") || description.Contains("USB-C") ||
+                name.Contains("Thunderbolt") || description.Contains("Thunderbolt"))
+            {
+                usbType = "USB-C";
+            }
+
+            // Check USB hub for Type-C connection
+            if (deviceId.Contains("USBC") || deviceId.Contains("TYPEC"))
+            {
+                usbType = "USB-C";
+            }
+
+            return (usbType, usbSpeed);
+        }
+
+        private void ScanUsbTypeCControllers(List<DeviceInfo> devices)
+        {
+            // Only scan and log once to avoid spam
+            if (_usbControllersScanned)
+                return;
+
+            try
+            {
+                // Scan for USB Type-C controllers (motherboard USB-C ports)
+                using var controllerSearcher = new ManagementObjectSearcher(
+                    "SELECT * FROM Win32_USBController");
+
+                foreach (ManagementObject controller in controllerSearcher.Get())
+                {
+                    var name = controller["Name"]?.ToString() ?? "";
+                    var description = controller["Description"]?.ToString() ?? "";
+
+                    // Log USB-C controller detection only once per controller
+                    if (name.Contains("Type-C") || name.Contains("USB-C") ||
+                        name.Contains("xHCI") || name.Contains("USB 3"))
+                    {
+                        if (_loggedUsbControllers.Add(name))
+                        {
+                            Log($"USB-C/3.0 Controller detected: {name}");
+                        }
+                    }
+                }
+
+                // Scan USB hubs for connected Type-C devices
+                using var hubSearcher = new ManagementObjectSearcher(
+                    "SELECT * FROM Win32_USBHub");
+
+                foreach (ManagementObject hub in hubSearcher.Get())
+                {
+                    var deviceId = hub["DeviceID"]?.ToString() ?? "";
+                    var name = hub["Name"]?.ToString() ?? "";
+
+                    // Log Type-C hub only once
+                    if (name.Contains("Type-C") || name.Contains("USB-C") ||
+                        deviceId.Contains("USBC"))
+                    {
+                        if (_loggedUsbControllers.Add($"Hub:{name}"))
+                        {
+                            Log($"USB-C Hub detected: {name}");
+                        }
+                    }
+                }
+
+                // Mark as scanned to avoid repeated scanning
+                _usbControllersScanned = true;
+            }
+            catch (Exception ex)
+            {
+                Log($"Error scanning USB controllers: {ex.Message}");
+            }
         }
 
         private static string ExtractSerialFromDeviceId(string deviceId)

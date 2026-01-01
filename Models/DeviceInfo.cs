@@ -18,7 +18,12 @@ namespace PhoneRomFlashTool.Models
         public long StorageSize { get; set; }
         public string BootloaderStatus { get; set; } = string.Empty;
 
+        // USB connection information
+        public string UsbType { get; set; } = "USB-A";  // USB-A, USB-C, Thunderbolt
+        public string UsbSpeed { get; set; } = "USB 2.0";  // USB 2.0, USB 3.0+, USB 3.1, USB 3.2
+
         public string DisplayName => $"{Brand} {Model} ({SerialNumber})";
+        public string ConnectionInfo => $"{UsbType} ({UsbSpeed})";
     }
 
     public enum DeviceConnectionType

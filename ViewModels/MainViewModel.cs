@@ -28,6 +28,7 @@ namespace PhoneRomFlashTool.ViewModels
         private readonly PhoneSpecViewModel _phoneSpecViewModel;
         private readonly EngineerToolsViewModel _engineerToolsViewModel;
         private readonly SetupViewModel _setupViewModel;
+        private readonly RomSearchViewModel _romSearchViewModel;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -39,6 +40,7 @@ namespace PhoneRomFlashTool.ViewModels
         public PhoneSpecViewModel PhoneSpecViewModel => _phoneSpecViewModel;
         public EngineerToolsViewModel EngineerToolsViewModel => _engineerToolsViewModel;
         public SetupViewModel SetupViewModel => _setupViewModel;
+        public RomSearchViewModel RomSearchViewModel => _romSearchViewModel;
 
         private ObservableCollection<DeviceInfo> _connectedDevices = new();
         private DeviceInfo? _selectedDevice;
@@ -125,6 +127,11 @@ namespace PhoneRomFlashTool.ViewModels
         private string _dataReceived = "0 KB";
         private string _appVersion = "v1.0.0";
 
+        // First run / Setup state
+        private int _selectedTabIndex;
+        private bool _isFirstRun;
+        private bool _showSetupPrompt;
+
         public string ConnectionStatus
         {
             get => _connectionStatus;
@@ -159,6 +166,24 @@ namespace PhoneRomFlashTool.ViewModels
         {
             get => _appVersion;
             set { _appVersion = value; OnPropertyChanged(); }
+        }
+
+        public int SelectedTabIndex
+        {
+            get => _selectedTabIndex;
+            set { _selectedTabIndex = value; OnPropertyChanged(); }
+        }
+
+        public bool IsFirstRun
+        {
+            get => _isFirstRun;
+            set { _isFirstRun = value; OnPropertyChanged(); }
+        }
+
+        public bool ShowSetupPrompt
+        {
+            get => _showSetupPrompt;
+            set { _showSetupPrompt = value; OnPropertyChanged(); }
         }
 
         public ObservableCollection<PartitionInfo> DevicePartitions
@@ -344,6 +369,33 @@ namespace PhoneRomFlashTool.ViewModels
 
             _setupViewModel = new SetupViewModel();
 
+            _romSearchViewModel = new RomSearchViewModel();
+            _romSearchViewModel.LogMessage += (s, msg) => AddLog(msg);
+
+            // Subscribe to setup completion events
+            _setupViewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SetupViewModel.AllToolsInstalled) && _setupViewModel.AllToolsInstalled)
+                {
+                    _settings.SetupCompleted = true;
+                    _settings.PlatformToolsInstalled = true;
+                    _settings.IsFirstRun = false;
+                    _settings.Save();
+                    ShowSetupPrompt = false;
+                    AddLog("Setup completed! All required tools are installed.");
+                }
+            };
+
+            // Check if first run or tools not installed
+            IsFirstRun = _settings.IsFirstRun;
+            ShowSetupPrompt = !_settings.SetupCompleted || !_downloadService.IsToolInstalled("platform-tools");
+
+            // If setup not complete, select Setup tab
+            if (ShowSetupPrompt)
+            {
+                SelectedTabIndex = 0; // Setup tab is first
+            }
+
             // Initialize commands
             RefreshDevicesCommand = new RelayCommand(async () => await RefreshDevicesAsync());
             LoadPartitionsCommand = new RelayCommand(async () => await LoadPartitionsAsync());
@@ -406,11 +458,8 @@ namespace PhoneRomFlashTool.ViewModels
             // Load tools and drivers list
             LoadAvailableToolsAndDrivers();
 
-            // Auto check for updates
-            if (_settings.AutoCheckUpdates)
-            {
-                _ = CheckForUpdatesAsync();
-            }
+            // Always check for updates on startup
+            _ = CheckForUpdatesAsync();
         }
 
         private void LoadRomDatabase()
@@ -708,10 +757,11 @@ namespace PhoneRomFlashTool.ViewModels
             var timestamp = DateTime.Now.ToString("HH:mm:ss");
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
-                LogMessages.Insert(0, $"[{timestamp}] {message}");
+                // Add to end for chronological order (auto-scroll will scroll to bottom)
+                LogMessages.Add($"[{timestamp}] {message}");
                 if (LogMessages.Count > 1000)
                 {
-                    LogMessages.RemoveAt(LogMessages.Count - 1);
+                    LogMessages.RemoveAt(0); // Remove oldest
                 }
             });
         }
