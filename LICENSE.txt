@@ -1,0 +1,56 @@
+============================================================
+                    PhoneX Manager
+            Copyright (c) 2024-2025 Xman Studio
+                  All rights reserved.
+============================================================
+
+END USER LICENSE AGREEMENT (EULA)
+
+IMPORTANT: PLEASE READ THIS LICENSE AGREEMENT CAREFULLY BEFORE
+USING THIS SOFTWARE.
+
+1. LICENSE GRANT
+   Xman Studio grants you a non-exclusive, non-transferable license
+   to use PhoneX Manager for personal and commercial purposes.
+
+2. RESTRICTIONS
+   You may not:
+   - Reverse engineer, decompile, or disassemble the software
+   - Modify, translate, or create derivative works
+   - Rent, lease, or lend the software to third parties
+   - Remove any proprietary notices or labels
+
+3. INTELLECTUAL PROPERTY
+   PhoneX Manager and all copies thereof are proprietary to
+   Xman Studio and title thereto remains in Xman Studio.
+
+4. DISCLAIMER OF WARRANTIES
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+   XMAN STUDIO DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED.
+
+5. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL XMAN STUDIO BE LIABLE FOR ANY SPECIAL,
+   INCIDENTAL, INDIRECT, OR CONSEQUENTIAL DAMAGES WHATSOEVER.
+
+6. WARNING
+   This software is intended for legitimate use only, including:
+   - Unlocking your own devices
+   - Recovery of your own data
+   - Development and testing purposes
+
+   Using this software to access devices without authorization
+   may violate local, state, and federal laws.
+
+7. THIRD-PARTY COMPONENTS
+   This software uses the following open-source components:
+   - Android Debug Bridge (ADB) - Apache License 2.0
+   - Fastboot - Apache License 2.0
+
+8. CONTACT
+   For support and inquiries:
+   Xman Studio
+
+============================================================
+                   Version 1.0.0
+                   Build Date: 2025
+============================================================

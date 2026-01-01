@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>PhoneXManager</AssemblyName>
+    <RootNamespace>PhoneRomFlashTool</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>Xman Studio</Authors>
+    <Company>Xman Studio</Company>
+    <Product>PhoneX Manager</Product>
+    <Copyright>Copyright (c) 2024-2025 Xman Studio. All rights reserved.</Copyright>
+    <Description>PhoneX Manager - Universal Phone ROM Flash, Backup, Recovery and Engineering Tool by Xman Studio</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LibUsbDotNet" Version="3.0.102-alpha" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Tools\adb.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Tools\fastboot.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

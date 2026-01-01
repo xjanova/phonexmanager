@@ -1,0 +1,45 @@
+# Build results
+bin/
+obj/
+out/
+
+# User files
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.DotSettings.user
+
+# NuGet Packages
+packages/
+*.nupkg
+
+# Test results
+TestResults/
+*.trx
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and databases
+*.log
+*.db
+*.sqlite
+
+# Tools folder (downloaded at runtime)
+Tools/*.exe
+Tools/*.dll
+!Tools/README.txt
+
+# Drivers folder
+Drivers/
+
+# Downloaded content
+Downloads/
